@@ -46,11 +46,11 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Node 20 不认 node --test 的 glob 写法（会当成字面路径），22 才认。
       # cache: npm 按 package-lock.json 缓存 ~/.npm，省掉每次全量下载。
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm

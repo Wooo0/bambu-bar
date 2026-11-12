@@ -24,18 +24,14 @@ pub fn create_tray(app: &AppHandle, state: Arc<AppState>) -> tauri::Result<()> {
     let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))
         .expect("tray icon");
 
-    let mut builder = TrayIconBuilder::with_id("main")
+    // icon_as_template(true)：macOS 上模板图跟随系统明暗自动反色，
+    // 无需准备两套图标；其他平台该设置无副作用。
+    let builder = TrayIconBuilder::with_id("main")
         .icon(icon)
         .icon_as_template(true)
         .tooltip("Bambu Bar")
         .menu(&menu)
         .show_menu_on_left_click(false);
-
-    #[cfg(target_os = "macos")]
-    {
-        // 模板图：跟随系统明暗自动反色，无需准备两套图标。
-        builder = builder.icon_as_template(true);
-    }
 
     builder
         .on_menu_event(move |app, event| match event.id().as_ref() {
@@ -172,14 +168,15 @@ pub fn position_near_tray(app: &AppHandle, win: &tauri::WebviewWindow, panel_h: 
 /// 又不在当前回调栈里。
 pub fn show_settings(app: &AppHandle) {
     let h = app.clone();
+    let hc = h.clone();
     let _ = h.run_on_main_thread(move || {
-        if let Some(w) = h.get_webview_window("settings") {
+        if let Some(w) = hc.get_webview_window("settings") {
             let _ = w.show();
             let _ = w.unminimize();
             let _ = w.set_focus();
             return;
         }
-        let _ = WebviewWindowBuilder::new(&h, "settings", WebviewUrl::App("settings.html".into()))
+        let _ = WebviewWindowBuilder::new(&hc, "settings", WebviewUrl::App("settings.html".into()))
             .title("Bambu Bar 设置")
             .inner_size(580.0, 840.0)
             .min_inner_size(480.0, 560.0)
