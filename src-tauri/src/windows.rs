@@ -100,7 +100,11 @@ pub fn toggle_popover(app: &AppHandle) {
         let _ = win.hide();
         return;
     }
-    position_near_tray(app, &win);
+    let h = win
+        .outer_size()
+        .map(|s| s.to_logical::<f64>(win.scale_factor().unwrap_or(1.0)).height)
+        .unwrap_or(POPOVER_H);
+    position_near_tray(app, &win, h);
     let _ = win.show();
     let _ = win.set_focus();
 }
@@ -109,14 +113,11 @@ pub fn toggle_popover(app: &AppHandle) {
 /// 锚点是托盘矩形本身：
 /// - 托盘在上半屏（macOS 菜单栏）→ 面板悬在托盘下方；
 /// - 托盘在下半屏（Windows 任务栏）→ 面板整体悬在托盘上方。
-/// 面板高度是动态的（set_panel_height 按内容实测），所以每次都以
-/// 当前实际尺寸计算；set_panel_height 拉高窗口后也会回调这里重定位。
-pub fn position_near_tray(app: &AppHandle, win: &tauri::WebviewWindow) {
+/// panel_h 由调用方传入（set_panel_height 刚 set_size 出去的值在
+/// outer_size 里可能还没生效，以参数为准而不是读回旧值）。
+pub fn position_near_tray(app: &AppHandle, win: &tauri::WebviewWindow, panel_h: f64) {
+    let panel_h = if panel_h > 0.0 { panel_h } else { POPOVER_H };
     let win_scale = win.scale_factor().unwrap_or(1.0);
-    let panel_h = win
-        .outer_size()
-        .map(|s| s.to_logical::<f64>(win_scale).height)
-        .unwrap_or(POPOVER_H);
 
     // 锚点：优先托盘矩形（逻辑坐标），拿不到退化为鼠标光标处的伪矩形
     let anchor = app
