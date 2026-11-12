@@ -45,15 +45,9 @@ pub fn create_tray(app: &AppHandle, state: Arc<AppState>) -> tauri::Result<()> {
                     st.request_pushall(&item.serial);
                 }
             }
-            // 设置窗必须挪到后台线程再创建：在 Windows 上，托盘菜单事件回调
-            // 跑在主线程事件循环里，这里同步 build 窗口会让事件循环等自己，
-            // 直接死锁——窗口空白且连关闭按钮都点不动。macOS 没这个限制。
-            "settings" => {
-                let h = app.clone();
-                tauri::async_runtime::spawn(async move {
-                    show_settings(&h);
-                });
-            }
+            // show_settings 内部会把自己排队到主线程事件循环的下一拍，
+            // 这里直接调用不会阻塞菜单事件回调。
+            "settings" => show_settings(app),
             "quit" => app.exit(0),
             _ => {}
         })
@@ -168,16 +162,28 @@ pub fn position_near_tray(app: &AppHandle, win: &tauri::WebviewWindow, panel_h: 
     let _ = win.set_position(tauri::LogicalPosition::new(px, py));
 }
 
+/// 打开设置窗。所有调用点（托盘菜单 / 面板按钮 / --settings 启动参数）
+/// 统一走这里，线程安全：
+/// - Windows 上窗口必须在主线程创建，挂到别的线程上 webview 永远加载
+///   不出来（白屏），还会卡死焦点事件让面板失去「失焦即隐藏」；
+/// - 但也不能在托盘菜单/命令的回调栈里同步创建——那会让事件循环等
+///   自己，直接死锁（关都关不掉）。
+/// run_on_main_thread 把创建动作排队到事件循环下一拍：既在主线程，
+/// 又不在当前回调栈里。
 pub fn show_settings(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("settings") {
-        let _ = w.show();
-        let _ = w.set_focus();
-        return;
-    }
-    let _ = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
-        .title("Bambu Bar 设置")
-        .inner_size(580.0, 840.0)
-        .min_inner_size(480.0, 560.0)
-        .resizable(true)
-        .build();
+    let h = app.clone();
+    let _ = h.run_on_main_thread(move || {
+        if let Some(w) = h.get_webview_window("settings") {
+            let _ = w.show();
+            let _ = w.unminimize();
+            let _ = w.set_focus();
+            return;
+        }
+        let _ = WebviewWindowBuilder::new(&h, "settings", WebviewUrl::App("settings.html".into()))
+            .title("Bambu Bar 设置")
+            .inner_size(580.0, 840.0)
+            .min_inner_size(480.0, 560.0)
+            .resizable(true)
+            .build();
+    });
 }
