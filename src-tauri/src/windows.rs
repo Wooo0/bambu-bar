@@ -137,7 +137,9 @@ fn position_near_tray(app: &AppHandle, win: &tauri::WebviewWindow) {
             let size = monitor.size().to_logical::<f64>(scale);
             let pos = monitor.position().to_logical::<f64>(scale);
             px = px.clamp(pos.x + 8.0, pos.x + size.width - POPOVER_W - 8.0);
-            py = py.clamp(pos.y + 8.0, pos.y + size.height - 120.0);
+            // 底边收敛必须算上面板自身高度，否则 Windows 底部托盘会把
+            // 面板下半截顶出屏幕外。
+            py = py.clamp(pos.y + 8.0, pos.y + size.height - POPOVER_H - 8.0);
         }
         let _ = win.set_position(tauri::LogicalPosition::new(px, py));
     }
