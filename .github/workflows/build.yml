@@ -10,15 +10,18 @@ on:
 
 jobs:
   build:
+      # macos-14 标签已被 GitHub 下线（排队即报 'macos-14-arm64-us-default'
+      # is not supported），统一改用 macos-latest（arm64）。
+      # x64 通过 --target x86_64-apple-darwin 交叉编译，不依赖 Intel 主机。
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-latest
             name: macos-arm64
             rust: aarch64-apple-darwin
             args: --target aarch64-apple-darwin --bundles app
-          - os: macos-14
+          - os: macos-latest
             name: macos-x64
             rust: x86_64-apple-darwin
             args: --target x86_64-apple-darwin --bundles app
