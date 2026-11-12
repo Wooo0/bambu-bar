@@ -158,14 +158,32 @@ pub fn position_near_tray(app: &AppHandle, win: &tauri::WebviewWindow, panel_h: 
     let _ = win.set_position(tauri::LogicalPosition::new(px, py));
 }
 
-/// 打开设置窗。所有调用点（托盘菜单 / 面板按钮 / --settings 启动参数）
-/// 统一走这里，线程安全：
-/// - Windows 上窗口必须在主线程创建，挂到别的线程上 webview 永远加载
-///   不出来（白屏），还会卡死焦点事件让面板失去「失焦即隐藏」；
-/// - 但也不能在托盘菜单/命令的回调栈里同步创建——那会让事件循环等
-///   自己，直接死锁（关都关不掉）。
-/// run_on_main_thread 把创建动作排队到事件循环下一拍：既在主线程，
-/// 又不在当前回调栈里。
+/// 启动时预创建设置窗（隐藏）。Windows 上点击时才创建窗口会踩一遍
+/// 事件循环的坑：回调栈里同步建 → 死锁；后台线程建 → webview 不加载
+/// （白屏）且破坏焦点事件；run_on_main_thread 建 → 依然白屏。
+/// 与 popover 同款方案：启动时建好，之后只做 show/hide，运行期
+/// 不存在「事件回调里创建窗口」这个场景。
+pub fn create_settings_window(app: &AppHandle) -> tauri::Result<()> {
+    let win = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
+        .title("Bambu Bar 设置")
+        .inner_size(580.0, 840.0)
+        .min_inner_size(480.0, 560.0)
+        .resizable(true)
+        .visible(false)
+        .build()?;
+
+    // 托盘应用通行行为：关设置窗 = 隐藏，销毁的话下次打开又要创建窗口。
+    let w = win.clone();
+    win.on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = w.hide();
+        }
+    });
+    Ok(())
+}
+
+/// 打开设置窗（窗口由 create_settings_window 在启动时预创建）。
 pub fn show_settings(app: &AppHandle) {
     let h = app.clone();
     let hc = h.clone();
@@ -174,13 +192,6 @@ pub fn show_settings(app: &AppHandle) {
             let _ = w.show();
             let _ = w.unminimize();
             let _ = w.set_focus();
-            return;
         }
-        let _ = WebviewWindowBuilder::new(&hc, "settings", WebviewUrl::App("settings.html".into()))
-            .title("Bambu Bar 设置")
-            .inner_size(580.0, 840.0)
-            .min_inner_size(480.0, 560.0)
-            .resizable(true)
-            .build();
     });
 }

@@ -137,6 +137,9 @@ pub fn run() {
             app.manage(state.clone());
 
             windows::create_popover(app.handle())?;
+            // 设置窗同样在启动时预创建（隐藏）——Windows 上点击时才创建
+            // 会白屏并破坏面板的焦点事件，见 create_settings_window 注释。
+            windows::create_settings_window(app.handle())?;
             windows::create_tray(app.handle(), state.clone())?;
 
             // `--demo`：临时演示，不写配置（排查/录屏用，不用去设置里来回勾）。
