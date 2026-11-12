@@ -105,44 +105,58 @@ pub fn toggle_popover(app: &AppHandle) {
     let _ = win.set_focus();
 }
 
-/// 把面板贴到托盘图标下方（macOS 菜单栏）。
-/// Windows/Linux 上 rect() 也实现了；拿不到就退化成鼠标位置。
-fn position_near_tray(app: &AppHandle, win: &tauri::WebviewWindow) {
-    let mut x = None;
-    let mut y = None;
+/// 把面板贴到托盘图标旁边，并保证完整落在可见区域内。
+/// 锚点是托盘矩形本身：
+/// - 托盘在上半屏（macOS 菜单栏）→ 面板悬在托盘下方；
+/// - 托盘在下半屏（Windows 任务栏）→ 面板整体悬在托盘上方。
+/// 面板高度是动态的（set_panel_height 按内容实测），所以每次都以
+/// 当前实际尺寸计算；set_panel_height 拉高窗口后也会回调这里重定位。
+pub fn position_near_tray(app: &AppHandle, win: &tauri::WebviewWindow) {
+    let win_scale = win.scale_factor().unwrap_or(1.0);
+    let panel_h = win
+        .outer_size()
+        .map(|s| s.to_logical::<f64>(win_scale).height)
+        .unwrap_or(POPOVER_H);
 
-    if let Some(tray) = app.tray_by_id("main") {
-        if let Ok(Some(rect)) = tray.rect() {
-            let scale = win.scale_factor().unwrap_or(1.0);
-            let pos = rect.position.to_logical::<f64>(scale);
-            let size = rect.size.to_logical::<f64>(scale);
-            x = Some(pos.x + size.width / 2.0 - POPOVER_W / 2.0);
-            y = Some(pos.y + size.height + 6.0);
+    // 锚点：优先托盘矩形（逻辑坐标），拿不到退化为鼠标光标处的伪矩形
+    let anchor = app
+        .tray_by_id("main")
+        .and_then(|tray| tray.rect().ok().flatten())
+        .map(|rect| {
+            let pos = rect.position.to_logical::<f64>(win_scale);
+            let size = rect.size.to_logical::<f64>(win_scale);
+            (pos.x, pos.y, size.width, size.height)
+        })
+        .or_else(|| {
+            app.cursor_position().ok().map(|p| {
+                let p = p.to_logical::<f64>(win_scale);
+                (p.x - 8.0, p.y, 16.0, 2.0)
+            })
+        });
+    let Some((tx, ty, tw, th)) = anchor else { return };
+
+    let mut px = tx + tw / 2.0 - POPOVER_W / 2.0;
+    let mut py;
+
+    if let Ok(Some(monitor)) = win.current_monitor() {
+        let msf = monitor.scale_factor();
+        let msize = monitor.size().to_logical::<f64>(msf);
+        let mpos = monitor.position().to_logical::<f64>(msf);
+
+        let tray_center_y = ty + th / 2.0;
+        if tray_center_y < mpos.y + msize.height / 2.0 {
+            py = ty + th + 6.0; // 上半屏：菜单栏下方
+        } else {
+            py = ty - panel_h - 6.0; // 下半屏：任务栏上方
         }
+        // 兜底收敛，正常情况上面已经算在屏幕内
+        px = px.clamp(mpos.x + 8.0, mpos.x + msize.width - POPOVER_W - 8.0);
+        py = py.clamp(mpos.y + 8.0, mpos.y + msize.height - panel_h - 8.0);
+    } else {
+        py = ty + th + 6.0;
     }
 
-    if x.is_none() || y.is_none() {
-        if let Ok(p) = app.cursor_position() {
-            let scale = win.scale_factor().unwrap_or(1.0);
-            x = Some(p.x / scale - POPOVER_W / 2.0);
-            y = Some(p.y / scale + 10.0);
-        }
-    }
-
-    // 贴边收敛：面板不能跑出屏幕
-    if let (Some(px), Some(py)) = (x, y) {
-        let (mut px, mut py) = (px, py);
-        if let Ok(Some(monitor)) = win.current_monitor() {
-            let scale = monitor.scale_factor();
-            let size = monitor.size().to_logical::<f64>(scale);
-            let pos = monitor.position().to_logical::<f64>(scale);
-            px = px.clamp(pos.x + 8.0, pos.x + size.width - POPOVER_W - 8.0);
-            // 底边收敛必须算上面板自身高度，否则 Windows 底部托盘会把
-            // 面板下半截顶出屏幕外。
-            py = py.clamp(pos.y + 8.0, pos.y + size.height - POPOVER_H - 8.0);
-        }
-        let _ = win.set_position(tauri::LogicalPosition::new(px, py));
-    }
+    let _ = win.set_position(tauri::LogicalPosition::new(px, py));
 }
 
 pub fn show_settings(app: &AppHandle) {

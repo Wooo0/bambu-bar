@@ -80,6 +80,11 @@ pub fn set_panel_height(app: AppHandle, height: f64) {
     if let Some(w) = app.get_webview_window("popover") {
         let h = height.clamp(120.0, 900.0);
         let _ = w.set_size(tauri::LogicalSize::new(crate::windows::POPOVER_W, h));
+        // 高度变了必须重新定位：Windows 下面板底边要始终悬在托盘上方，
+        // 否则打印机一多、窗口被撑高，下半截又跑出屏幕。
+        if w.is_visible().unwrap_or(false) {
+            crate::windows::position_near_tray(app, &w);
+        }
         if std::env::var_os("BAMBU_BAR_DEBUG_TRAY").is_some() {
             eprintln!("[panel] resize -> {}x{}", crate::windows::POPOVER_W, h);
         }
