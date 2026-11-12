@@ -45,7 +45,15 @@ pub fn create_tray(app: &AppHandle, state: Arc<AppState>) -> tauri::Result<()> {
                     st.request_pushall(&item.serial);
                 }
             }
-            "settings" => show_settings(app),
+            // 设置窗必须挪到后台线程再创建：在 Windows 上，托盘菜单事件回调
+            // 跑在主线程事件循环里，这里同步 build 窗口会让事件循环等自己，
+            // 直接死锁——窗口空白且连关闭按钮都点不动。macOS 没这个限制。
+            "settings" => {
+                let h = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    show_settings(&h);
+                });
+            }
             "quit" => app.exit(0),
             _ => {}
         })
