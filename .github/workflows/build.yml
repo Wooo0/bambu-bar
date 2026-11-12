@@ -13,6 +13,11 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
+# GITHUB_TOKEN 默认只读；tauri-action 打 tag 时要创建 Release，
+# 没有这行会报「Resource not accessible by integration」。
+permissions:
+  contents: write
+
 jobs:
   build:
       # macos-14 标签已被 GitHub 下线（排队即报 'macos-14-arm64-us-default'
