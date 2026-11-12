@@ -85,7 +85,7 @@ pub fn set_panel_height(app: AppHandle, height: f64) {
         // set_size 是异步的，outer_size 此时读到的可能还是旧高度，
         // 所以直接把目标高度 h 传下去，不读回窗口尺寸。
         if w.is_visible().unwrap_or(false) {
-            crate::windows::position_near_tray(app, &w, h);
+            crate::windows::position_near_tray(&app, &w, h);
         }
         if std::env::var_os("BAMBU_BAR_DEBUG_TRAY").is_some() {
             eprintln!("[panel] resize -> {}x{}", crate::windows::POPOVER_W, h);

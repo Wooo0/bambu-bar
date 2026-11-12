@@ -8,6 +8,11 @@ on:
   push:
     tags: ["v*"]
 
+# 移动 tag 重复触发时，取消旧 run 只留最新一次，省排队和编译时长
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
       # macos-14 标签已被 GitHub 下线（排队即报 'macos-14-arm64-us-default'
@@ -39,9 +44,11 @@ jobs:
       - uses: actions/checkout@v4
 
       # Node 20 不认 node --test 的 glob 写法（会当成字面路径），22 才认。
+      # cache: npm 按 package-lock.json 缓存 ~/.npm，省掉每次全量下载。
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       # Linux 的托盘是 AppIndicator，WebView 是 WebKitGTK —— 不装这两组依赖
       # 编译能过但运行起来既没有图标也没有界面。
@@ -53,8 +60,7 @@ jobs:
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
             librsvg2-dev patchelf libfuse2
 
-      # macos-13 runner 已下线，x64 也在 macos-14（arm64 主机）上交叉编译，
-      # 所以 target 不能按 os 猜，得由 matrix 显式给。
+      # target 不能按 os 猜：x64 是在 arm64 主机上交叉编译的，得由 matrix 显式给。
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust }}
